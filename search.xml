@@ -313,8 +313,9 @@ LLVM 提供不同的优化级别（如 <code>-O1</code>、<code>-O2</code>、<co
     <content><![CDATA[<h1>ptmalloc2源码详解 Part1</h1>
 <p>本系列讲解的版本为Glibc2.23</p>
 <p>高版本的diff比如tcache bin的增加等会被放在heap exploitation系列中进行分析</p>
+<hr>
+<p>在正式开始malloc流程分析的讲解之前，我们先来了解点基础知识</p>
 <h2 id="Chunk">Chunk</h2>
-<p>在正式开始malloc流程分析的讲解之前，我们先来了解点基础知识。</p>
 <p>在ptmalloc中，无论是申请内存还是释放内存，操作的对象都为<strong>堆块(Chunk)</strong></p>
 <p>其在源码中的结构体表示为</p>
 <figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">malloc_chunk</span> &#123;</span></span><br><span class="line"></span><br><span class="line">  INTERNAL_SIZE_T      prev_size;  <span class="comment">/* Size of previous chunk (if free).  */</span></span><br><span class="line">  INTERNAL_SIZE_T      size;       <span class="comment">/* Size in bytes, including overhead. */</span></span><br><span class="line"></span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">malloc_chunk</span>* <span class="title">fd</span>;</span>         <span class="comment">/* double links -- used only if free. */</span></span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">malloc_chunk</span>* <span class="title">bk</span>;</span></span><br><span class="line"></span><br><span class="line">  <span class="comment">/* Only used for large blocks: pointer to next larger size.  */</span></span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">malloc_chunk</span>* <span class="title">fd_nextsize</span>;</span> <span class="comment">/* double links -- used only if free. */</span></span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">malloc_chunk</span>* <span class="title">bk_nextsize</span>;</span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
@@ -323,13 +324,55 @@ LLVM 提供不同的优化级别（如 <code>-O1</code>、<code>-O2</code>、<co
 <p>INTERNAL_SIZE_T为机器字长</p>
 <p>对于64位来讲，INTERNAL_SIZE_T的大小为8字节，那么堆块最小占用空间就为0x20字节</p>
 </blockquote>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">已申请堆块在内存中形如:</span><br><span class="line">    chunk-&gt; +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+</span><br><span class="line">	    			|             Size of previous chunk, if allocated            | |</span><br><span class="line">	    			+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+</span><br><span class="line">	    			|             Size of chunk, in bytes                       |M|P|</span><br><span class="line">      mem-&gt; +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+</span><br><span class="line">            |             User data starts here...                          .</span><br><span class="line">            .                                                               .</span><br><span class="line">            .             (malloc_usable_size() bytes)                      .</span><br><span class="line">            .                                                               |</span><br><span class="line">nextchunk-&gt; +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+</span><br><span class="line">            |             Size of chunk                                     |</span><br><span class="line">            +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+</span><br></pre></td></tr></table></figure>
 <h3 id="prev-size">prev_size</h3>
 <p>这个字段只有当低地址的堆块被释放后才会被使用，<strong>指示了前一个堆块的大小</strong></p>
 <p>这也就<strong>意味着此处空间是可以被复用的</strong>，即两个已分配堆块，前一个堆块可以使用后一个堆块的prev_size字段的空间</p>
 <h3 id="size">size</h3>
 <p><strong>当前堆块的大小</strong></p>
-<p>但是在ptmalloc中，其最低位有另外的含义</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line"></span><br></pre></td></tr></table></figure>
+<p>在上图中可以看到<code>size</code>的最低位有两个字符<code>M</code>和<code>P</code>，其中：</p>
+<ul class="lvl-0">
+<li class="lvl-2">
+<p><strong>P(PREV_INUSE)</strong>：该位被设置时，代表上一个堆块是一个正在使用的堆块</p>
+</li>
+<li class="lvl-2">
+<p>**M(IS_MMAPED)：**该位被设置时，代表堆块内存是通过mmap分配的</p>
+</li>
+</ul>
+<p>这里还有一个上图中未被提到的字段</p>
+<ul class="lvl-0">
+<li class="lvl-2">
+<p>**A(NON_MAIN_ARENA)：**记录当前堆块是否属于主进程</p>
+</li>
+</ul>
+<p>这三个字段从高位到低位排序为：A-&gt;M-&gt;P</p>
+<h3 id="fd和bk">fd和bk</h3>
+<p><strong>双向链表中的前向和后继指针，只有当堆块被释放时才会被使用</strong></p>
+<p>在堆块处于<strong>被分配状态时</strong>，从fd字段开始为用户空间，即上图中mem指向的位置</p>
+<h3 id="fd-nextsize和bk-nextsize">fd_nextsize和bk_nextsize</h3>
+<p>作用同fd和bk，但是<strong>只有大小处在largebin区间</strong>中的被释放的堆块才会使用这两个字段</p>
+<h2 id="Chunk相关操作">Chunk相关操作</h2>
+<p>在ptmalloc中，用户申请的内存大小和实际申请的内存大小是不一样的</p>
+<h3 id="request2size">request2size</h3>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">#  define MALLOC_ALIGNMENT       (2 *SIZE_SZ)</span><br><span class="line"></span><br><span class="line">/* The corresponding bit mask value */</span><br><span class="line">#define MALLOC_ALIGN_MASK      (MALLOC_ALIGNMENT - 1)</span><br><span class="line"></span><br><span class="line">/* The smallest possible chunk */</span><br><span class="line">#define MIN_CHUNK_SIZE        (offsetof(struct malloc_chunk, fd_nextsize))</span><br><span class="line"></span><br><span class="line">/* The smallest size we can malloc is an aligned minimal chunk */</span><br><span class="line">#define MINSIZE  \</span><br><span class="line">  (unsigned long)(((MIN_CHUNK_SIZE+MALLOC_ALIGN_MASK) &amp; ~MALLOC_ALIGN_MASK))</span><br><span class="line"></span><br><span class="line">#define request2size(req)                                         \</span><br><span class="line">  (((req) + SIZE_SZ + MALLOC_ALIGN_MASK &lt; MINSIZE)  ?             \</span><br><span class="line">   MINSIZE :                                                      \</span><br><span class="line">   ((req) + SIZE_SZ + MALLOC_ALIGN_MASK) &amp; ~MALLOC_ALIGN_MASK)</span><br><span class="line">   </span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p>假设在64位下此时用户想要申请0x20大小的内存</p>
+<p>ptmalloc会使用<code>request2size</code>宏函数检查0x20(req)+0x8(SIZE_SZ)+0xf(MALLOC_ALIGN_MASK)是否小于0x20(MINSIZE)</p>
+<p>如果小于的话，直接返回MINSIZE给用户，否则返回(0x20+0x8+0xf)&amp;~0xf即0x30给用户</p>
+<p>这也就意味着：</p>
+<ol>
+<li class="lvl-3">
+<p><strong>当申请小于0x20大小堆内存的时候，系统会直接返回0x20给用户</strong></p>
+</li>
+<li class="lvl-3">
+<p><strong>当申请大于0x20大小堆内存的时候，系统会给原来申请大小加上0x10（prev_size和size字段所占用空间）并且最终对其到0x10</strong></p>
+</li>
+</ol>
+<p>prev_size和size字段所处空间对于用户来说是透明的，因此对于最终返回给用户的指针是需要进行一些处理的</p>
+<h3 id="chunk2mem、mem2chunk">chunk2mem、mem2chunk</h3>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="comment">/* conversion from malloc headers to user pointers, and back */</span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> chunk2mem(p)   ((void*)((char*)(p) + 2*SIZE_SZ))</span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> mem2chunk(mem) ((mchunkptr)((char*)(mem) - 2*SIZE_SZ))</span></span><br></pre></td></tr></table></figure>
+<p>对于已经分配的 chunk，通过 chunk2mem 宏根据 chunk 地址获得返回给用户的内存地址</p>
+<p>反过来通过 mem2chunk 宏根据 mem 地址得到 chunk 地址</p>
+<p>chunk 的地址是按 2*SIZE_SZ对齐的，而 chunk 结构体的前两个域刚好也是 2*SIZE_SZ 大小，所以，mem 地址也是 2*SIZE_SZ 对齐的</p>
 ]]></content>
       <categories>
         <category>PWN</category>
