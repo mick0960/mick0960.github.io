@@ -311,13 +311,13 @@
       <div class="site-state-item site-state-categories">
             <a href="/categories/">
           
-        <span class="site-state-item-count">4</span>
+        <span class="site-state-item-count">5</span>
         <span class="site-state-item-name">分类</span></a>
       </div>
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">12</span>
+        <span class="site-state-item-count">15</span>
         <span class="site-state-item-name">标签</span></a>
       </div>
   </nav>
@@ -364,12 +364,12 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-area"></i>
     </span>
-    <span title="站点总字数">48k</span>
+    <span title="站点总字数">39k</span>
     <span class="post-meta-divider">|</span>
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="站点阅读时长">44 分钟</span>
+    <span title="站点阅读时长">36 分钟</span>
 </div>
 
 
@@ -478,30 +478,6 @@ NexT.utils.loadComments(document.querySelector('#valine-comments'), () => {
     guest = guest.split(',').filter(item => {
       return GUEST.includes(item);
     });
-    new Valine({
-      el         : '#valine-comments',
-      admin_email: '321515148@qq.com',
-      verify     : true,
-      notify     : true,
-      appId      : 'noHzhvbBi7OsAmuK0WtsUKSI-gzGzoHsz',
-      appKey     : 'AvceOVwNI54gcxJNlnsrIyFS',
-      placeholder: "留个言叭~",
-      avatar     : 'mm',
-      meta       : guest,
-      pageSize   : '10' || 10,
-      visitor    : false,
-      lang       : '' || 'zh-cn',
-      path       : location.pathname,
-      recordIP   : true,
-      serverURLs : ''
-    });
-  }, window.Valine);
-});
-</script>
-
-</body>
-</html>
-
     new Valine({
       el         : '#valine-comments',
       admin_email: '321515148@qq.com',
